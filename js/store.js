@@ -31,15 +31,75 @@ let S = null;
 const UI = { tab: "today", careSeg: "state", sheet: null, review: null, draft: "", toast: null, calMonth: null, calSel: null, calFilters: {}, planDay: 0, hl: false, fakeNow: null, logDate: null, chatImg: null, allTargets: false };
 const now = () => UI.fakeNow ?? nowMins();
 
-function load() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { S = Object.assign(blankState(), JSON.parse(raw)); return true; } } catch (e) { console.warn(e); }
-  S = null; return false;
+/* ---------- persistence ----------
+   Everything lives in one IndexedDB record (hundreds of MB available, so photos and reports fit):
+   the data S, plus the server version and merge base it was last synced at. The three are always written
+   together, so the phone can never believe it is newer than what it actually saved. Falls back to
+   localStorage where IndexedDB isn't available. */
+const LOCAL = { base: null, version: 0, failed: false };
+const KV = (() => {
+  let useIdb = typeof indexedDB !== "undefined", dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open("pathya-care", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blocked"));
+  }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction("kv", mode), req = fn(t.objectStore("kv"));
+      t.oncomplete = () => res(req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error("aborted"));
+    });
+  };
+  const ls = { get: k => localStorage.getItem(k), set: (k, v) => localStorage.setItem(k, v), del: k => localStorage.removeItem(k) };
+  const run = async (mode, fn, fallback) => {
+    if (useIdb) { try { return await tx(mode, fn); } catch (e) { if (e && e.name === "QuotaExceededError") throw e; if (!dbp || e.message === "blocked") useIdb = false; else throw e; } }
+    return fallback();
+  };
+  return {
+    get idb() { return useIdb; },
+    get: k => run("readonly", st => st.get(k), () => ls.get(k)),
+    set: (k, v) => run("readwrite", st => st.put(v, k), () => ls.set(k, v)),
+    del: k => run("readwrite", st => st.delete(k), () => ls.del(k))
+  };
+})();
+
+async function loadStore() {
+  let rec = null;
+  try {
+    const raw = await KV.get(STORE_KEY);
+    if (raw) rec = JSON.parse(raw);
+    if (!rec && KV.idb) rec = JSON.parse(localStorage.getItem(STORE_KEY) || "null");   // move data saved by older versions
+  } catch (e) { console.warn(e); }
+  if (rec && rec.fmt !== 2) {   // older format: the state alone, with base and version kept separately
+    let acct = null, base = null;
+    try { acct = JSON.parse(localStorage.getItem("pathya-care-acct") || "null"); base = JSON.parse(localStorage.getItem("pathya-care-base") || "null"); } catch (e) { /* ignore */ }
+    rec = { fmt: 2, s: rec, base, version: (acct && acct.version) || 0 };
+  }
+  S = rec && rec.s ? Object.assign(blankState(), rec.s) : null;
+  LOCAL.base = rec ? rec.base || null : null; LOCAL.version = rec ? rec.version || 0 : 0;
+  if (rec) {
+    try { await KV.set(STORE_KEY, JSON.stringify(rec)); if (KV.idb) localStorage.removeItem(STORE_KEY); localStorage.removeItem("pathya-care-base"); } catch (e) { /* keep the old copy */ }
+  }
+  return !!S;
 }
 let saveTimer = null;
+function persist() {
+  if (!S || (typeof SYNC !== "undefined" && SYNC.inactive)) return Promise.resolve(false);   // another tab is in charge of the data now
+  const rec = JSON.stringify({ fmt: 2, s: S, base: LOCAL.base, version: LOCAL.version });   // snapshot taken now
+  return KV.set(STORE_KEY, rec).then(() => { LOCAL.failed = false; return true; }, e => {
+    console.warn(e);
+    if (!LOCAL.failed) toast("This phone's storage is full. Remove some photos in Medical report, or free up space on the phone.");
+    LOCAL.failed = true;
+    if (typeof setStatus === "function" && typeof SYNC !== "undefined" && SYNC.user) setStatus("error", "This phone's storage is full. Changes are being saved to your account.");
+    return false;
+  });
+}
 function writeNow() {
   clearTimeout(saveTimer); saveTimer = null; if (!S) return;
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
-  catch (e) { toast("Storage is full on this device. Remove some uploaded photos in Medical report."); }
+  if (typeof SYNC !== "undefined" && SYNC.inactive) return;
+  persist();
+  if (typeof syncSoon === "function") syncSoon();   // even if this phone couldn't save, the account can
 }
 function save() {
   clearTimeout(saveTimer);
@@ -49,7 +109,7 @@ if (typeof addEventListener === "function") {
   addEventListener("pagehide", () => { if (saveTimer) writeNow(); });
   addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && saveTimer) writeNow(); });
 }
-function resetAll() { clearTimeout(saveTimer); saveTimer = null; localStorage.removeItem(STORE_KEY); S = null; }
+function resetAll() { clearTimeout(saveTimer); saveTimer = null; S = null; LOCAL.base = null; LOCAL.version = 0; LOCAL.failed = false; KV.del(STORE_KEY).catch(() => {}); localStorage.removeItem(STORE_KEY); }
 
 function addReading(key, v, extra = {}) { const r = { id: uid(), key, v, d: extra.d || TODAY_KEY, t: extra.t || clock(now()), ...extra }; S.readings.push(r); return r; }
 function addLog(items, opts = {}) {

@@ -15,6 +15,7 @@ function paintToast() { let el = document.getElementById("toast"); if (!UI.toast
 function render(keep = true) {
   const app = document.getElementById("app"), y = window.scrollY;
   document.body.classList.toggle("hl", !!UI.hl);
+  if (SYNC.inactive) { app.innerHTML = inactiveView(); return; }
   if (!S) { app.innerHTML = vWelcome(); return; }
   R = buildCare(S);
   const n = R.paths.filter(x => !["goal"].includes(x.kind)).length, openEsc = S.escalations.some(e => e.status === "open" && e.level !== "routine");
@@ -25,9 +26,9 @@ function render(keep = true) {
   app.innerHTML = `<div class="shell">
     <aside class="side" aria-label="Main navigation"><div class="sbrand">${LOGO}<span class="brand">Pathya</span></div>
       <nav>${TABS.map(([k, l]) => `<button class="snav ${UI.tab === k ? "on" : ""}" data-act="tab" data-v="${k}" ${UI.tab === k ? 'aria-current="page"' : ""}>${ICON[k]}<span>${l}</span>${k === "care" && openEsc ? '<i class="dot"></i>' : ""}</button>${k === "care" ? `<div class="ssub">${CARE_SEGS.map(([c, ic, cl]) => `<button class="${UI.tab === "care" && UI.careSeg === c ? "on" : ""}" data-act="care" data-v="${c}"><span aria-hidden="true">${ic}</span> ${cl}</button>`).join("")}</div>` : ""}`).join("")}</nav>
-      <div class="sfoot">${chip}<div class="tiny muted" style="margin-top:10px">Food guidance, not medical advice.<br>Emergency: <a href="tel:112">112</a></div></div></aside>
-    <div class="mainwrap"><header class="ahead"><span class="row hbrand" style="gap:8px">${LOGO}<span class="brand">Pathya</span></span><span class="row" style="gap:8px">${chip}<button class="avatar" data-act="tab" data-v="profile" aria-label="Profile">${esc((S.profile.name || "?")[0])}</button></span></header>
-    <main class="abody" id="main">${body}</main></div></div>
+      <div class="sfoot">${chip}<div style="margin-top:8px">${syncBadge()}</div><div class="tiny muted" style="margin-top:10px">Food guidance, not medical advice.<br>Emergency: <a href="tel:112">112</a></div></div></aside>
+    <div class="mainwrap"><header class="ahead"><span class="row hbrand" style="gap:8px">${LOGO}<span class="brand">Pathya</span></span><span class="row" style="gap:8px">${syncBadge()}${chip}<button class="avatar" data-act="tab" data-v="profile" aria-label="Profile">${esc((S.profile.name || "?")[0])}</button></span></header>
+    <main class="abody" id="main">${demoBanner()}${body}</main></div></div>
     <nav class="dock" aria-label="Main navigation">${TABS.map(([k, l]) => `<button data-act="tab" data-v="${k}" class="${UI.tab === k ? "on" : ""}" ${UI.tab === k ? 'aria-current="page"' : ""}>${ICON[k]}${l}${k === "care" && openEsc ? '<span class="dot"></span>' : ""}</button>`).join("")}</nav>
     ${vSheet(R)}`;
   if (UI.hl) document.querySelectorAll("[data-src]").forEach(el => { el.dataset.src = el.dataset.src.split(/\s*\+\s*/).map(srcLabel).join(" + "); });
@@ -95,12 +96,23 @@ document.addEventListener("change", async e => {
   const el = e.target;
   if (el.type === "file" && el.files && el.files[0]) {
     const f = el.files[0];
+    if (el.id === "importData") {
+      el.value = "";
+      if (f.size > 60e6) return toast("That file is too large to import.");
+      let st;
+      try { st = parseImport(await f.text()); } catch (err) { return toast(err.message); }
+      const synced = SYNC.user && S && !S.demo;
+      if (!confirm(synced ? "Replace everything in your account with this file? This changes your data on all your phones." : "Replace everything on this phone with this file?")) return;
+      if (synced) st.demo = null;
+      S = Object.assign(blankState(), st); POOL_CACHE.key = null; PLAN_CACHE.key = null;
+      commit(false); toast("Data imported");
+      return;
+    }
     try {
       const { data, mime } = await readFile(f, el.id === "chatPhoto" || el.id === "logPhoto" ? 800 : 1100);
       if (el.id === "logPhoto") { UI.logPhotoData = data; render(); }
       else if (el.id === "chatPhoto") { UI.chatImg = data; render(); }
       else if (el.id === "docUpload") { UI.sheet = { type: "docMeta", data, mime, name: f.name.replace(/\.[^.]+$/, "") }; render(); }
-      else if (el.id === "importData") { const txt = atob(data.split(",")[1]); S = Object.assign(blankState(), JSON.parse(txt)); commit(false); toast("Data imported"); }
     } catch (err) { toast(err.message === "too large" ? "That file is too large. Try a photo or a PDF under 1.5 MB." : "Couldn't read that file"); }
     return;
   }
@@ -147,6 +159,7 @@ document.addEventListener("click", e => {
   if (el.classList.contains("sheet-bg") && e.target.closest(".sheet")) return;
   const a = el.dataset.act, v = el.dataset.v, i = el.dataset.i != null ? +el.dataset.i : null;
   if (el.tagName === "A") { if (a === "escSent") { const x = S.escalations.find(z => z.id === v); if (x) x.status = "sent"; save(); setTimeout(render, 50); } return; }
+  if (a.startsWith("acct")) { acctAction(a, el); return; }
   if (!S && !["demo", "startFresh"].includes(a)) return;
   let keep = true;
   switch (a) {
@@ -154,7 +167,7 @@ document.addEventListener("click", e => {
     case "welcome": if (confirm("Start your own profile? The sample person's data will be cleared from this device.")) { resetAll(); UI.alert = null; } keep = false; break;
     case "startFresh": {
       const g = id => document.getElementById(id);
-      if (!g("w-consent").checked) return toast("Please tick the consent box to continue");
+      if (g("w-consent") && !g("w-consent").checked) return toast("Please tick the consent box to continue");
       startFresh({ name: g("w-name").value.trim(), age: +g("w-age").value || 35, sex: g("w-sex").value, height: +g("w-h").value || 160, weight: +g("w-w").value || 65, diet: g("w-diet").value, goal: g("w-goal").value });
       keep = false; break;
     }
@@ -234,7 +247,7 @@ document.addEventListener("click", e => {
     }
     case "docSave": { const g = id => document.getElementById(id).value; S.docs.unshift({ id: uid(), type: g("d-type"), d: g("d-date"), title: g("d-title"), note: g("d-note"), data: UI.sheet.data, mime: UI.sheet.mime }); UI.sheet = null; toast("Saved to your Medical report"); break; }
     case "docView": UI.sheet = { type: "docView", v }; break;
-    case "docDel": if (confirm("Delete this document from this device?")) S.docs = S.docs.filter(d => d.id !== v); break;
+    case "docDel": if (confirm(accountsOn() && SYNC.user ? "Delete this document from your account and all your phones?" : "Delete this document from this device?")) S.docs = S.docs.filter(d => d.id !== v); break;
     // care: plan & day
     case "planDay": UI.planDay = +v; break;
     case "planSwap": S.planSwaps[v] = (S.planSwaps[v] || 0) + 1; break;
@@ -286,15 +299,18 @@ document.addEventListener("click", e => {
 });
 
 /* ---------- boot ---------- */
-(() => {
+(async () => {
   const param = new URLSearchParams(location.search);
   const theme = param.get("scoutTheme") || param.get("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   document.documentElement.setAttribute("data-theme", theme);
-  load();
+  claimTab();
+  await loadStore();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});   // ask the browser not to evict health data
   const want = param.get("demo");
   if (want && DEMOS[want] && (!S || (S.demo && S.demo !== want))) loadDemo(want);
   if (want && history.replaceState) { param.delete("demo"); history.replaceState(null, "", location.pathname + (param.toString() ? "?" + param : "") + location.hash); }
   if (S && param.get("tab")) UI.tab = param.get("tab");
   render(false);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+  acctBoot().finally(() => safeRender());
 })();

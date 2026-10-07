@@ -4,6 +4,7 @@
 const TKEY = { energy_kcal: "kcal", protein_g: "p", carb_g: "c", fibre_g: "fib", sodium_mg: "na", potassium_mg: "k", phosphorus_mg: "ph", added_sugar_g: "asug", added_fat_g: "afat", calcium_mg: "ca", iron_mg: "fe", vitb12_ug: "b12", sfa_g: "sfa" };
 const careSrc = t => (t.src || []).filter(s => s && !["GOAL", "P_WEIGHT_LOSS", "P_HEALTHY_EATING", "P_MUSCLE_GAIN", "P_WEIGHT_GAIN"].includes(s));
 const tasksOf = d => (S.tasks[d] = S.tasks[d] || { fluids: 0, meds: {}, done: {} });
+const tasksView = d => S.tasks[d] || { fluids: 0, meds: {}, done: {} };   // read-only: drawing a screen must not change saved data
 const trackers = R => {
   const t = new Set(["weight"]);
   if (R.has("P_T2D") || R.has("P_T1D") || R.has("P_PREDIABETES")) t.add("glucose");
@@ -81,7 +82,7 @@ function setupCard(R) {
   if (done === steps.length) return "";
   return `<div class="card setup"><div class="row"><h4 style="margin:0">Finish setting up</h4>${pill(`${done}/${steps.length}`, "accent")}</div><div class="bar lvl-accent" style="margin:8px 0 6px"><i style="width:${done / steps.length * 100}%"></i></div>
     ${steps.map(([l, ok, act, v, b, act2, b2]) => `<div class="row" style="padding:6px 0"><span class="small">${ok ? "✅" : "⬜"} ${l}</span>${ok ? "" : `<span class="row" style="gap:6px">${act2 ? `<button class="btn sm ghost" data-act="setupNone" data-v="${act2}">${b2}</button>` : ""}<button class="btn sm" data-act="${act}" data-v="${v}">${b}</button></span>`}</div>`).join("")}
-    <div class="tiny muted">Takes about 2 minutes. Everything stays on this phone.</div>${done >= 3 ? `<button class="btn sm ghost" data-act="setupNone" data-v="dismissed">Hide</button>` : ""}</div>`;
+    <div class="tiny muted">Takes about 2 minutes. Everything you add is ${accountsOn() && SYNC.user ? "saved privately to your account" : "kept on this phone"}.</div>${done >= 3 ? `<button class="btn sm ghost" data-act="setupNone" data-v="dismissed">Hide</button>` : ""}</div>`;
 }
 function upNext(list) {
   if (!list.length) return `<div class="card upnext"><div class="row"><h4 style="margin:0">Up next</h4><span class="tiny muted">All caught up ✓</span></div></div>`;
@@ -158,7 +159,7 @@ function reviewCard(R) {
   return h;
 }
 function hero(R, tot) {
-  const p = S.profile, logs = S.logs[TODAY_KEY] || [], tk = tasksOf(TODAY_KEY);
+  const p = S.profile, logs = S.logs[TODAY_KEY] || [], tk = tasksView(TODAY_KEY);
   if (S.modes.sick) return `<div class="card care lvl-warn" data-src="M_SICK_DAY"><h4>🤒 Sick-day mode</h4><p class="small" style="margin:0 0 8px">Targets are paused. Focus on fluids and small, easy food.</p><div class="row"><div class="glasses">${Array.from({ length: 10 }, (_, i) => `<span class="glass ${i < tk.fluids ? "f" : ""}"></span>`).join("")}</div><button class="btn sm" data-act="fluid">+ glass</button></div>${R.patterns.filter(x => x.src === "M_SICK_DAY" || x.rule === "sick_day_medicine_prompt").map(x => `<div class="tiny" style="margin-top:6px">• ${esc(x.text)}</div>`).join("")}<div class="tiny" style="margin-top:6px">Can't keep fluids down for 24 h? Get urgent care.</div></div>`;
   if (R.edRisk) return `<div class="card care" data-src="P_ED_RISK"><h4>Regular eating</h4><p class="small muted" style="margin:0 0 8px">Regular meals matter more than numbers: 3 meals and 2 snacks.</p><div class="dots">${Array.from({ length: 5 }, (_, i) => `<span class="${i < logs.length ? "f" : ""}"></span>`).join("")}</div><div class="tiny muted" style="margin-top:6px">${logs.length} of 5 so far today</div></div>`;
   if (R.has("P_CKD") && R.T.potassium_mg?.hardMax) {
@@ -201,7 +202,7 @@ function timeline(R) {
   return `<div class="card ${guard ? "care" : ""}" ${guard ? `data-src="${R.blocks.find(b => b.id === "meal_skipping").src[0]}"` : ""}><h4>Meals</h4>${rows}</div>`;
 }
 function medsDue() {
-  const n = now(), tk = tasksOf(TODAY_KEY), out = [];
+  const n = now(), tk = tasksView(TODAY_KEY), out = [];
   const PAIR = { "Before breakfast": "With dinner", "With breakfast": "With dinner", Morning: "Evening", "With lunch": "With dinner", "With dinner": "With breakfast", Evening: "Morning", "At bedtime": "Morning" };
   for (const m of S.meds) {
     if (m.freq === "As needed") continue;

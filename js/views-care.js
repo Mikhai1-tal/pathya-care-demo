@@ -32,7 +32,7 @@ function careState(R) {
   if (S.conditions.some(c => ["ckd", "t1d", "lipids"].includes(c.id)) || Object.keys(S.limits).length) h += `<div class="card care" data-src="CLINICIAN"><div class="row"><h4 style="margin:0">Limits from your doctor</h4><button class="btn sm" data-act="sheet" data-v="addLimit">+ Add</button></div>${Object.entries(S.limits).filter(([, x]) => x && x.v).map(([k, x]) => `<div class="row small" style="padding:5px 0;border-bottom:1px solid var(--cp-border)"><span>🔒 ${LIMIT_KEYS[k] || k} ≤ <b>${fmt(x.v)} ${k.endsWith("_g") ? "g" : "mg"}</b>/day<br><span class="tiny muted">${esc(x.by || "")}${x.date ? " · " + nice(x.date) : ""}</span></span><button class="btn sm ghost" data-act="limitDel" data-v="${k}">Remove</button></div>`).join("") || `<div class="note lvl-warn">No limits entered. For kidney disease, Pathya won't guess potassium or phosphorus limits; ask your nephrologist.</div>`}</div>`;
   // documents
   h += `<div class="card"><div class="row"><h4 style="margin:0">Reports &amp; prescriptions</h4><label class="btn sm" style="cursor:pointer">+ Upload<input type="file" id="docUpload" accept="image/*,application/pdf" hidden></label></div>
-    ${S.docs.length ? S.docs.slice(0, 4).map(docRow).join("") + (S.docs.length > 4 ? `<button class="btn sm ghost" data-act="care" data-v="report">See all ${S.docs.length} in Medical report</button>` : "") : `<div class="empty">Upload lab reports, prescriptions or discharge summaries. They stay on this device and appear in your Medical report.</div>`}</div>`;
+    ${S.docs.length ? S.docs.slice(0, 4).map(docRow).join("") + (S.docs.length > 4 ? `<button class="btn sm ghost" data-act="care" data-v="report">See all ${S.docs.length} in Medical report</button>` : "") : `<div class="empty">Upload lab reports, prescriptions or discharge summaries. They ${whereKept()} and appear in your Medical report.</div>`}</div>`;
   // screeners from the kit
   const scr = [["idrs", !S.conditions.some(c => ["t2d", "t1d", "prediabetes"].includes(c.id))], ["scoff", true], ["phq2", true]].filter(([, ok]) => ok);
   h += `<div class="card"><h4>Quick check-ups</h4>${scr.map(([id]) => { const s = DB.screeners[id], v = S.screens[id]; return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--cp-border)"><div class="grow"><b class="small">${esc(s.name)}</b><div class="tiny muted">${esc(s.purpose)}${v != null ? ` · last score ${v}` : ""}</div></div><button class="btn sm" data-act="screen" data-v="${id}">${v != null ? "Retake" : "Start"}</button></div>`; }).join("")}<div class="tiny muted" style="margin-top:6px">Sensitive questions are asked only if you choose to start. Results route you to help; they never diagnose.</div></div>`;
@@ -44,7 +44,7 @@ function docRow(d) {
 
 /* ---------- Day to day ---------- */
 function careDay(R) {
-  const tk = tasksOf(TODAY_KEY), doc = S.team.doctor.name || "your doctor";
+  const tk = tasksView(TODAY_KEY), doc = S.team.doctor.name || "your doctor";
   let h = "";
   const meds = medsDue();
   const tr = trackers(R), rd = [];
