@@ -274,3 +274,10 @@ label.field { display: block; } label.field > .lbl { display: block; font-size: 
 
 [id^="sec-"], #auth, #try { scroll-margin-top: 84px; }
 @media (min-width: 960px) { .ahead .syncb { display: none; } }
+
+/* welcome: show where a top button took you */
+.flash { animation: flashcard 1.4s ease-out; }
+@keyframes flashcard { 0%, 35% { box-shadow: 0 0 0 3px var(--cp-turmeric), var(--cp-shadow); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.check.flash { border-radius: 10px; animation-duration: 1.8s; }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; outline: 3px solid var(--cp-turmeric); outline-offset: 2px; } }
+.welcome .btns button.btn { font: inherit; font-weight: 700; cursor: pointer; }

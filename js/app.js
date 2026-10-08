@@ -38,6 +38,17 @@ function render(keep = true) {
 }
 const commit = (keep = true) => { save(); render(keep); };
 
+/* ---------- welcome: make the top buttons visibly do something, even when the card is already on screen ---------- */
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function flash(el) { if (!el) return; el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+function goToCard(id) {
+  const card = document.getElementById(id); if (!card) return;
+  card.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  flash(card);
+  const first = card.querySelector("#w-name, #a-email, button.persona");
+  if (first) setTimeout(() => first.focus({ preventScroll: true }), reduceMotion() ? 0 : 400);
+}
+
 /* ---------- safety evaluation of readings (kit red flags) ---------- */
 function alertFor(level, title, html, src, actions) { UI.alert = { level, title, html, src, actions: actions || [["dismissAlert", "OK"]] }; }
 const HYPO = `<ol class="small" style="margin:6px 0 0;padding-left:18px"><li>Take 15 g fast sugar now: 3 tsp sugar or glucose in water, or 150 ml fruit juice.</li><li>Wait 15 minutes, then check again.</li><li>Still under 70? Repeat once more.</li><li>Back above 70? Eat your next meal or a snack.</li></ol><div class="tiny" style="margin-top:6px">If you can't swallow or feel confused, someone should call 112.</div>`;
@@ -160,6 +171,7 @@ document.addEventListener("click", e => {
   const a = el.dataset.act, v = el.dataset.v, i = el.dataset.i != null ? +el.dataset.i : null;
   if (el.tagName === "A") { if (a === "escSent") { const x = S.escalations.find(z => z.id === v); if (x) x.status = "sent"; save(); setTimeout(render, 50); } return; }
   if (a.startsWith("acct")) { acctAction(a, el); return; }
+  if (a === "welcomeGo") { goToCard(v); return; }
   if (!S && !["demo", "startFresh"].includes(a)) return;
   let keep = true;
   switch (a) {
@@ -167,7 +179,12 @@ document.addEventListener("click", e => {
     case "welcome": if (confirm("Start your own profile? The sample person's data will be cleared from this device.")) { resetAll(); UI.alert = null; } keep = false; break;
     case "startFresh": {
       const g = id => document.getElementById(id);
-      if (g("w-consent") && !g("w-consent").checked) return toast("Please tick the consent box to continue");
+      if (g("w-consent") && !g("w-consent").checked) {
+        const err = g("setupErr");
+        if (err) { err.textContent = "Please tick the box above to agree, then press Start."; flash(g("w-consent-row")); g("w-consent").focus(); }
+        else toast("Please tick the consent box to continue");
+        return;
+      }
       startFresh({ name: g("w-name").value.trim(), age: +g("w-age").value || 35, sex: g("w-sex").value, height: +g("w-h").value || 160, weight: +g("w-w").value || 65, diet: g("w-diet").value, goal: g("w-goal").value });
       keep = false; break;
     }

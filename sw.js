@@ -1,5 +1,5 @@
 /* Pathya Care service worker: network-first so updates show immediately, cache fallback for offline use. */
-const CACHE = "pathya-care-v5";
+const CACHE = "pathya-care-v6";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/app.css", "data/pathya-data.js",
   "js/core.js", "js/store.js", "js/planner.js", "js/chat.js", "js/views-today.js", "js/views-care.js", "js/views-care2.js", "js/views-profile.js", "js/sync.js", "js/account.js", "js/app.js", "privacy.html",

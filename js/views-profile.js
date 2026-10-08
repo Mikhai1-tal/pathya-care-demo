@@ -56,7 +56,7 @@ function vWelcome() {
   return `<div class="welcome"><div class="hero"><div class="hero-t"><div class="row start" style="gap:10px">${LOGO}<span class="brand" style="font-size:26px">Pathya</span></div>
       <h1 class="htitle">Eat what suits your health.</h1>
       <p class="hsub">Pathya checks your everyday Indian meals against your conditions and medicines: diabetes, BP, kidney, PCOS, thyroid, GLP-1 and more. You get a diet chart you'll actually follow, and your doctor stays in the loop.</p>
-      <div class="btns">${acc ? `<a class="btn primary" href="#auth">Create free account</a><a class="btn" href="#try">Try a sample person</a>` : `<a class="btn primary" href="#try">Try a sample person</a><a class="btn" href="#setup">Set it up for me</a>`}</div></div>
+      <div class="btns">${acc ? `<button class="btn primary" data-act="welcomeGo" data-v="auth">Create free account</button><button class="btn" data-act="welcomeGo" data-v="try">Try a sample person</button>` : `<button class="btn primary" data-act="welcomeGo" data-v="try">Try a sample person</button><button class="btn" data-act="welcomeGo" data-v="setup">Set it up for me</button>`}</div></div>
       <div class="vps">
         <div class="vp"><span>🍛</span><b>Real Indian food</b><small>${DB.dishes.length} dishes and staples with ICMR-NIN (IFCT) nutrition</small></div>
         <div class="vp"><span>🩺</span><b>Built around you</b><small>${Object.keys(DB.pathways).length} care pathways, ${Object.keys(DB.drugs).length} medicine food-rules, Jain and vrat aware</small></div>
@@ -67,7 +67,8 @@ function vWelcome() {
     ${acc ? authCard() : `<div class="card" id="setup"><h4>Set it up for me</h4><p class="tiny muted" style="margin-top:-4px">About 2 minutes. Add conditions and medicines next.</p><div class="grid2">${fld("Name", '<input id="w-name" placeholder="Your name" autocomplete="given-name">')}${fld("Age", '<input id="w-age" type="number" inputmode="numeric" value="35">')}</div>
       <div class="grid3">${fld("Sex", '<select id="w-sex"><option value="female">Female</option><option value="male">Male</option></select>')}${fld("Height (cm)", '<input id="w-h" type="number" inputmode="numeric" value="160">')}${fld("Weight (kg)", '<input id="w-w" type="number" inputmode="decimal" value="65" step="0.1">')}</div>
       <div class="grid2">${fld("Diet", `<select id="w-diet">${DIETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`)}${fld("Goal", `<select id="w-goal">${GOALS.map(([v, l]) => `<option value="${v}" ${v === "maintain" ? "selected" : ""}>${l}</option>`).join("")}</select>`)}</div>
-      <label class="check"><input type="checkbox" id="w-consent"> I agree that Pathya may use the health details I enter to personalise food guidance. They stay on this device, and I can delete them anytime.</label>
+      <label class="check" id="w-consent-row"><input type="checkbox" id="w-consent" aria-describedby="setupErr"> I agree that Pathya may use the health details I enter to personalise food guidance. They stay on this device, and I can delete them anytime.</label>
+      <p class="autherr" id="setupErr" role="alert"></p>
       <button class="btn primary block" data-act="startFresh">Start</button></div>`}
     <div class="trust"><span>✓ Grounded in ICMR-NIN data</span><span>✓ Never changes your medicines</span><span>✓ Works offline</span><span>✓ Emergency? Call <a href="tel:112">112</a></span></div>
     <p class="tiny muted" style="text-align:center">${esc(DB.meta.licence)} Pathya gives food guidance, not medical advice.</p></div>`;
